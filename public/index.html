@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gadget Link Widget</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/vs2015.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+</head>
+<body>
+  <div class="topbar">
+    <div class="topbar-brand">Gadget Link</div>
+    <div class="topbar-path">
+      <input type="text" id="folder-input" placeholder="Enter folder path (e.g., /Users/you/project)" spellcheck="false">
+      <button id="scan-btn">Scan</button>
+    </div>
+    <div class="topbar-file" id="current-file-label">No file selected</div>
+    <div class="topbar-annotations">
+      <span class="legend keep-legend">@keep</span>
+      <span class="legend edit-legend">@edit</span>
+      <button id="clear-annotations-btn" title="Clear all annotations">Clear</button>
+    </div>
+  </div>
+
+  <div class="main-layout">
+    <!-- Left Panel: File Tree -->
+    <div class="panel panel-left">
+      <div class="panel-header">Explorer</div>
+      <div id="file-tree" class="file-tree">
+        <div class="placeholder">Scan a folder to view files</div>
+      </div>
+    </div>
+
+    <!-- Center Panel: Code Editor -->
+    <div class="panel panel-center">
+      <div class="panel-header">Editor</div>
+      <div id="code-area" class="code-area">
+        <div class="placeholder">Select a file to view code</div>
+      </div>
+    </div>
+
+    <!-- Right Panel: Widget Sidebar -->
+    <div class="panel panel-right">
+      <div class="tab-bar">
+        <button class="tab active" data-tab="deps">Dependencies</button>
+        <button class="tab" data-tab="rewrite">LLM Rewrite</button>
+        <button class="tab" data-tab="wiki">Architecture</button>
+      </div>
+
+      <div class="tab-content active" id="tab-deps">
+        <button id="run-deps-btn" class="action-btn">Analyze Dependencies</button>
+        <div id="deps-result" class="result-area">
+          <div class="placeholder">Run dependency analysis on the scanned folder</div>
+        </div>
+      </div>
+
+      <div class="tab-content" id="tab-rewrite">
+        <button id="run-rewrite-btn" class="action-btn">Rewrite Code</button>
+        <div id="rewrite-controls" class="rewrite-controls hidden">
+          <button id="accept-btn" class="action-btn accept">Accept</button>
+          <button id="reject-btn" class="action-btn reject">Reject</button>
+        </div>
+        <div id="rewrite-result" class="result-area">
+          <div class="placeholder">Annotate code with @keep / @edit, then click Rewrite</div>
+        </div>
+      </div>
+
+      <div class="tab-content" id="tab-wiki">
+        <button id="run-wiki-btn" class="action-btn">Generate Wiki</button>
+        <div id="wiki-result" class="result-area wiki-content">
+          <div class="placeholder">Generate an architecture summary of the scanned folder</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
