@@ -12,8 +12,13 @@
   <div class="topbar">
     <div class="topbar-brand">Gadget Link</div>
     <div class="topbar-path">
-      <input type="text" id="folder-input" placeholder="Enter folder path (e.g., /Users/you/project)" spellcheck="false">
+      <input type="text" id="folder-input" placeholder="Enter folder path (local mode) or paste/upload files" spellcheck="false">
       <button id="scan-btn">Scan</button>
+      <button id="paste-btn" title="Paste code from clipboard">Paste Code</button>
+      <label class="upload-label" for="upload-input">Upload Files</label>
+      <input type="file" id="upload-input" multiple webkitdirectory style="display:none">
+      <input type="file" id="upload-files-input" multiple style="display:none">
+      <button id="upload-files-btn" title="Upload individual files">Upload Files</button>
     </div>
     <div class="topbar-file" id="current-file-label">No file selected</div>
     <div class="topbar-annotations">
@@ -72,6 +77,19 @@
           <div class="placeholder">Generate an architecture summary of the scanned folder</div>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- Paste Modal -->
+  <div id="paste-modal" class="modal hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <span>Paste Code</span>
+        <button id="paste-modal-close" class="modal-close">&times;</button>
+      </div>
+      <input type="text" id="paste-filename" placeholder="Filename (e.g., app.js)" class="modal-input">
+      <textarea id="paste-textarea" placeholder="Paste your code here..." class="modal-textarea"></textarea>
+      <button id="paste-submit" class="action-btn">Load Code</button>
     </div>
   </div>
 

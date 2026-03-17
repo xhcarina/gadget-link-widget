@@ -5,6 +5,7 @@ const state = {
   currentCode: '',
   annotations: {},         // { lineNumber: 'keep' | 'edit' }
   rewrittenCode: null,
+  uploadedFiles: {},       // { filename: content } - for browser-uploaded/pasted files
 };
 
 // DOM Elements
@@ -309,8 +310,44 @@ function extensionToLang(ext) {
 
 // ---- Dependency Checker ----
 runDepsBtn.addEventListener('click', async () => {
-  if (!state.folderPath) {
-    depsResult.innerHTML = '<div class="placeholder" style="color:var(--orange)">Scan a folder first</div>';
+  const hasUploaded = Object.keys(state.uploadedFiles).length > 0;
+  if (!state.folderPath && !hasUploaded) {
+    depsResult.innerHTML = '<div class="placeholder" style="color:var(--orange)">Scan a folder or upload files first</div>';
+    return;
+  }
+
+  // Client-side dependency analysis for uploaded files
+  if (!state.folderPath && hasUploaded) {
+    const deps = {};
+    const externalDeps = new Set();
+    const importPatterns = [
+      /import\s+.*?from\s+['"](.+?)['"]/g,
+      /import\s+['"](.+?)['"]/g,
+      /require\s*\(\s*['"](.+?)['"]\s*\)/g,
+      /from\s+(\S+)\s+import/g,
+    ];
+    for (const [name, content] of Object.entries(state.uploadedFiles)) {
+      const fileDeps = [];
+      for (const pattern of importPatterns) {
+        const regex = new RegExp(pattern.source, pattern.flags);
+        let match;
+        while ((match = regex.exec(content)) !== null) {
+          const dep = match[1];
+          if (dep.startsWith('.') || dep.startsWith('/')) {
+            fileDeps.push(dep);
+          } else {
+            externalDeps.add(dep.split('/')[0]);
+          }
+        }
+      }
+      if (fileDeps.length > 0) deps[name] = fileDeps;
+    }
+    renderDeps({
+      internalDeps: deps,
+      externalDeps: [...externalDeps],
+      packageJsonDeps: {},
+      requirementsTxtDeps: [],
+    });
     return;
   }
   setLoading(depsResult, 'Analyzing dependencies...');
@@ -454,8 +491,32 @@ rejectBtn.addEventListener('click', () => {
 
 // ---- Architecture Wiki ----
 runWikiBtn.addEventListener('click', async () => {
-  if (!state.folderPath) {
-    wikiResult.innerHTML = '<div class="placeholder" style="color:var(--orange)">Scan a folder first</div>';
+  const hasUploaded = Object.keys(state.uploadedFiles).length > 0;
+  if (!state.folderPath && !hasUploaded) {
+    wikiResult.innerHTML = '<div class="placeholder" style="color:var(--orange)">Scan a folder or upload files first</div>';
+    return;
+  }
+
+  // If we have uploaded files but no server folder, use client-side wiki
+  if (!state.folderPath && hasUploaded) {
+    setLoading(wikiResult, 'Generating architecture wiki with Claude...');
+    runWikiBtn.disabled = true;
+    try {
+      const data = await api('/api/rewrite', {
+        code: Object.entries(state.uploadedFiles).map(([name, content]) => `--- ${name} ---\n${content}`).join('\n\n'),
+        annotations: {},
+        fileName: 'architecture-request',
+      });
+      // Repurpose rewrite endpoint with a wiki prompt via architecture endpoint
+      const wikiData = await api('/api/architecture-inline', {
+        files: state.uploadedFiles,
+      });
+      wikiResult.innerHTML = renderMarkdown(wikiData.wiki);
+    } catch (err) {
+      wikiResult.innerHTML = `<div class="placeholder" style="color:var(--red)">Error: ${escapeHtml(err.message)}</div>`;
+    } finally {
+      runWikiBtn.disabled = false;
+    }
     return;
   }
   setLoading(wikiResult, 'Generating architecture wiki with Claude...');
@@ -468,6 +529,143 @@ runWikiBtn.addEventListener('click', async () => {
   } finally {
     runWikiBtn.disabled = false;
   }
+});
+
+// ---- Paste Code ----
+const pasteBtn = document.getElementById('paste-btn');
+const pasteModal = document.getElementById('paste-modal');
+const pasteModalClose = document.getElementById('paste-modal-close');
+const pasteFilename = document.getElementById('paste-filename');
+const pasteTextarea = document.getElementById('paste-textarea');
+const pasteSubmit = document.getElementById('paste-submit');
+
+pasteBtn.addEventListener('click', () => {
+  pasteModal.classList.remove('hidden');
+  pasteTextarea.focus();
+});
+
+pasteModalClose.addEventListener('click', () => {
+  pasteModal.classList.add('hidden');
+});
+
+pasteModal.addEventListener('click', (e) => {
+  if (e.target === pasteModal) pasteModal.classList.add('hidden');
+});
+
+pasteSubmit.addEventListener('click', () => {
+  const code = pasteTextarea.value;
+  const filename = pasteFilename.value.trim() || 'untitled.js';
+  if (!code) return;
+
+  state.uploadedFiles[filename] = code;
+  loadLocalFile(filename, code);
+  renderUploadedFileTree();
+  pasteModal.classList.add('hidden');
+  pasteTextarea.value = '';
+  pasteFilename.value = '';
+});
+
+// ---- File Upload ----
+const uploadFilesBtn = document.getElementById('upload-files-btn');
+const uploadFilesInput = document.getElementById('upload-files-input');
+
+uploadFilesBtn.addEventListener('click', () => {
+  uploadFilesInput.click();
+});
+
+uploadFilesInput.addEventListener('change', async (e) => {
+  const files = e.target.files;
+  if (!files.length) return;
+
+  for (const file of files) {
+    try {
+      const text = await file.text();
+      const name = file.webkitRelativePath || file.name;
+      state.uploadedFiles[name] = text;
+    } catch {
+      // skip binary files
+    }
+  }
+
+  // Load the first file
+  const firstName = Object.keys(state.uploadedFiles)[0];
+  if (firstName) {
+    loadLocalFile(firstName, state.uploadedFiles[firstName]);
+  }
+  renderUploadedFileTree();
+  uploadFilesInput.value = '';
+});
+
+function loadLocalFile(filename, content) {
+  const ext = '.' + filename.split('.').pop();
+  state.currentFile = { path: filename, relPath: filename };
+  state.currentCode = content;
+  state.annotations = {};
+  state.rewrittenCode = null;
+  rewriteControls.classList.add('hidden');
+  currentFileLabel.textContent = filename;
+  renderCode(content, ext);
+}
+
+function renderUploadedFileTree() {
+  const filenames = Object.keys(state.uploadedFiles);
+  if (filenames.length === 0) return;
+
+  // Clear or append to file tree
+  const existing = document.getElementById('uploaded-section');
+  if (existing) existing.remove();
+
+  const section = document.createElement('div');
+  section.id = 'uploaded-section';
+  section.innerHTML = '<div class="tree-section-header">Uploaded / Pasted</div>';
+
+  for (const name of filenames) {
+    const el = document.createElement('div');
+    el.className = 'tree-item';
+    el.style.paddingLeft = '8px';
+    el.innerHTML = `<span class="icon">&#128196;</span><span class="name">${escapeHtml(name)}</span>`;
+    el.addEventListener('click', () => {
+      document.querySelectorAll('.tree-item.active').forEach(i => i.classList.remove('active'));
+      el.classList.add('active');
+      loadLocalFile(name, state.uploadedFiles[name]);
+    });
+    section.appendChild(el);
+  }
+
+  fileTree.appendChild(section);
+}
+
+// ---- Drag & Drop on code area ----
+codeArea.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  codeArea.style.outline = '2px dashed var(--accent)';
+});
+
+codeArea.addEventListener('dragleave', () => {
+  codeArea.style.outline = '';
+});
+
+codeArea.addEventListener('drop', async (e) => {
+  e.preventDefault();
+  codeArea.style.outline = '';
+
+  const files = e.dataTransfer.files;
+  if (!files.length) return;
+
+  for (const file of files) {
+    try {
+      const text = await file.text();
+      state.uploadedFiles[file.name] = text;
+    } catch {
+      // skip binary files
+    }
+  }
+
+  const firstName = [...files].find(f => state.uploadedFiles[f.name])?.name;
+  if (firstName) {
+    loadLocalFile(firstName, state.uploadedFiles[firstName]);
+  }
+  renderUploadedFileTree();
 });
 
 function renderMarkdown(md) {

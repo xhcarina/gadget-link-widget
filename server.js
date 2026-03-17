@@ -292,6 +292,54 @@ ${filesContext}`
   }
 });
 
+// POST /api/architecture-inline - generate wiki from uploaded file contents
+app.post('/api/architecture-inline', async (req, res) => {
+  try {
+    const { files } = req.body;
+    if (!files || Object.keys(files).length === 0) {
+      return res.status(400).json({ error: 'No files provided' });
+    }
+
+    const filesContext = Object.entries(files)
+      .map(([name, content]) => `--- ${name} ---\n${content}`)
+      .join('\n\n');
+
+    const message = await anthropic.messages.create({
+      model: 'claude-sonnet-4-5-20250929',
+      max_tokens: 4096,
+      messages: [{
+        role: 'user',
+        content: `Analyze this codebase and generate an architecture wiki summary in Markdown.
+
+Include these sections:
+## Project Overview
+Brief description of what this project does.
+
+## Module Descriptions
+Description of each major module/directory and its purpose.
+
+## Data Flow
+Text-based diagram showing how data flows through the system.
+
+## Key Patterns & Conventions
+Notable patterns, naming conventions, and architectural decisions.
+
+## File Structure
+Annotated file tree.
+
+Here are the project files:
+
+${filesContext}`
+      }],
+    });
+
+    const wiki = message.content[0].text;
+    res.json({ wiki });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Gadget Link Widget running at http://localhost:${PORT}`);
